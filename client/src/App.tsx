@@ -96,7 +96,16 @@ function AppContent() {
     try {
       const res = await fetch('/api/dashboard');
       if (!res.ok) {
-        throw new Error(`Server returned HTTP ${res.status}`);
+        let msg = `Server returned HTTP ${res.status}`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.error) {
+            msg = errJson.error;
+          }
+        } catch {
+          // ignore json parse error
+        }
+        throw new Error(msg);
       }
       const json: DashboardPayload = await res.json();
       setData(json);
@@ -112,8 +121,16 @@ function AppContent() {
       setError(null);
       setLoading(false);
     } catch (err: any) {
+      const msg = err?.message || 'Error communicating with IUM backend';
+      const isAtlasWhitelistError =
+        msg.toLowerCase().includes('whitelist') ||
+        msg.toLowerCase().includes('network access') ||
+        msg.toLowerCase().includes('database unavailable');
+      const isFatalConfig = isAtlasWhitelistError || msg.includes('MONGODB_URI is not set');
+
       // If server is warming up or connection momentarily unavailable, retry with backoff
-      if (attempt < 4) {
+      // But if it's an IP whitelist or missing env error, stop retrying immediately so the user doesn't wait indefinitely
+      if (attempt < 3 && !isFatalConfig) {
         const backoffMs = attempt * 1000;
         console.warn(`Connection attempt ${attempt} failed, retrying in ${backoffMs}ms...`);
         retryTimerRef.current = setTimeout(() => {
@@ -122,11 +139,10 @@ function AppContent() {
         return;
       }
 
-      // If all automatic retries failed:
+      // If all automatic retries failed or fatal configuration error:
       setLoading(false);
-      const msg = err?.message || 'Error communicating with IUM backend';
       setError(msg);
-      console.warn('Backend connection unavailable after retries:', msg);
+      console.warn('Backend connection unavailable:', msg);
     }
   }, [syncSettingsFromPayload, data]);
 
@@ -177,14 +193,51 @@ function AppContent() {
 
   // Full-screen error only if there is NO data cached and initial load completely failed
   if (!data) {
+    const isMongoWhitelistError =
+      error?.toLowerCase().includes('whitelist') ||
+      error?.toLowerCase().includes('network access') ||
+      error?.toLowerCase().includes('database unavailable');
+
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-8 max-w-md w-full border border-rose-200 text-center shadow-xs">
-          <AlertCircle className="w-10 h-10 text-rose-600 mx-auto mb-3" />
-          <h2 className="text-lg font-bold text-slate-900">System Connection Error</h2>
+        <div className="bg-white rounded-2xl p-6 sm:p-8 max-w-lg w-full border border-rose-200 text-center shadow-lg">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 text-rose-600 flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900">
+            {isMongoWhitelistError ? 'MongoDB Atlas IP Whitelist Required' : 'System Connection Error'}
+          </h2>
           <p className="text-xs text-slate-600 mt-1 mb-4">
-            {error || 'Unable to establish initial connection with server. Dev server may be starting up.'}
+            {isMongoWhitelistError
+              ? 'Vercel serverless functions cannot connect to your MongoDB Atlas cluster because Atlas is blocking incoming connections from outside IP addresses.'
+              : (error || 'Unable to establish initial connection with server.')}
           </p>
+
+          {isMongoWhitelistError && (
+            <div className="mb-5 text-left text-xs bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-900">
+              <strong className="block font-semibold mb-2 text-amber-950 text-sm">
+                How to resolve in MongoDB Atlas:
+              </strong>
+              <ol className="list-decimal pl-4 space-y-1.5 text-amber-800 leading-relaxed">
+                <li>
+                  Log in to your <a href="https://cloud.mongodb.com" target="_blank" rel="noreferrer" className="underline font-semibold hover:text-amber-950">MongoDB Atlas Dashboard</a>.
+                </li>
+                <li>
+                  In the left sidebar under <strong>Security</strong>, click <strong>Network Access</strong>.
+                </li>
+                <li>
+                  Click the <strong>+ Add IP Address</strong> button.
+                </li>
+                <li>
+                  Click <strong>Allow Access from Anywhere</strong> (sets <code>0.0.0.0/0</code>) so Vercel&apos;s dynamic serverless functions can connect.
+                </li>
+                <li>
+                  Click <strong>Confirm</strong>. Atlas takes ~30–60 seconds to deploy the change.
+                </li>
+              </ol>
+            </div>
+          )}
+
           <button
             onClick={() => {
               setError(null);
