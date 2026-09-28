@@ -1,0 +1,6 @@
+{
+  "name": "IUM Fee Management",
+  "description": "Tuition fee management platform with editable family & payment records, mandatory invoice tracking, multi-sheet Excel (.xlsx) export with date & month filtering, cash flow forecasting, and audit trail.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

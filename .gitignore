@@ -1,0 +1,15 @@
+node_modules/
+build/
+dist/
+coverage/
+tools/screenshots/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Local credential dumps (e.g. the file Atlas onboarding writes) hold a
+# plaintext password, so they must never be committed. The database password
+# belongs in server/.env, which the `.env*` rule above already covers.
+atlas-credentials.env
+*credentials*.env
