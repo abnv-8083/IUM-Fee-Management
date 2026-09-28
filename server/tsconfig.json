@@ -13,5 +13,6 @@
     "noEmit": true,
     "strict": false
   },
-  "include": ["src"]
+  // `../api` holds the Vercel function, which imports this workspace's source.
+  "include": ["src", "../api"]
 }

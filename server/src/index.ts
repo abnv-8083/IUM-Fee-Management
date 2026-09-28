@@ -1,55 +1,19 @@
-import express from 'express';
-import cors from 'cors';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-import { assertDatabaseConfigured, env, isProduction } from './config/env.js';
+import { createApp } from './app.js';
+import { assertDatabaseConfigured, env } from './config/env.js';
 import { connectDatabase, disconnectDatabase } from './config/database.js';
-import apiRouter from './routes/index.js';
-import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
+/**
+ * Long-running Node entry point, used by `npm run dev` and by `npm start` on a
+ * host that keeps a process alive (a VM, Render, Railway, Fly...).
+ *
+ * Vercel does not run this file: serverless functions are short-lived, so
+ * `api/index.ts` wraps the same Express app from `app.ts` instead.
+ */
 async function startServer() {
   assertDatabaseConfigured();
   await connectDatabase();
 
-  const app = express();
-
-  app.use(express.json({ limit: '10mb' }));
-  app.use(express.urlencoded({ extended: true }));
-
-  app.use(
-    cors({
-      origin: env.corsOrigins.length > 0 ? env.corsOrigins : true,
-      credentials: true,
-      allowedHeaders: [
-        'Origin',
-        'X-Requested-With',
-        'Content-Type',
-        'Accept',
-        'Authorization',
-      ],
-    })
-  );
-
-  // All application routes live under /api.
-  app.use('/api', apiRouter);
-
-  // In production, optionally serve the built React bundle from client/dist so a
-  // single process can host the whole app.
-  const clientDist = path.resolve(__dirname, '../../client/dist');
-  if (isProduction && fs.existsSync(clientDist)) {
-    app.use(express.static(clientDist));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(clientDist, 'index.html'));
-    });
-  } else {
-    app.use(notFoundHandler);
-  }
-
-  app.use(errorHandler);
+  const app = createApp();
 
   const server = app.listen(env.port, '0.0.0.0', () => {
     console.log(`[IUM Fee Management API] listening on http://localhost:${env.port}`);

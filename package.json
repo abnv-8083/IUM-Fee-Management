@@ -2,6 +2,9 @@
   "name": "ium-fee-management",
   "private": true,
   "version": "1.0.0",
+  "engines": {
+    "node": ">=20"
+  },
   "description": "IUM Fee Management - MERN tuition fee platform (React + Express + MongoDB Atlas)",
   "workspaces": [
     "client",

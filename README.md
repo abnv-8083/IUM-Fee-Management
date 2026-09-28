@@ -121,6 +121,39 @@ A fresh database begins with zero records and default settings (INR / ₹). Eith
 
 To wipe all transactional data and start over, use *Settings → Database → Clear*, or `POST /api/database/clear`.
 
+## Deploying to Vercel
+
+The repository is already configured for Vercel: `vercel.json` publishes the built React bundle to the CDN and routes every `/api/*` request to a serverless function (`api/index.ts`) that wraps the same Express app the Node entry point uses. Because both live on one origin, the client's relative `/api/...` fetches need no CORS setup and no API base URL.
+
+**1. Import the repository**
+
+Vercel → *Add New → Project*, pick the repo, and leave the framework preset as detected (*Other*) — `vercel.json` supplies the build command and output directory.
+
+**2. Set environment variables**
+
+Under *Settings → Environment Variables*, add these for Production (and Preview if you want previews to work):
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `MONGODB_URI` | yes | Your Atlas SRV connection string |
+| `MONGODB_DB_NAME` | yes | `ium_fees` |
+| `GEMINI_API_KEY` | no | Without it the assistant falls back to the rules engine |
+| `CORS_ORIGIN` | no | Only needed if you call the API from a *different* origin |
+| `DNS_FALLBACK_SERVERS` | no | Not needed on Vercel; see the note below |
+
+**3. Allow the function to reach Atlas**
+
+Serverless functions run from rotating IP addresses, so add `0.0.0.0/0` to Atlas *Network Access* — or use Atlas's own Vercel integration, which authorises the deployment without opening the cluster to the internet.
+
+### Differences from running on a server
+
+- **The API is serverless.** Requests are served by short-lived functions, not a process that stays up. `api/index.ts` keeps the Mongoose connection at module scope so warm instances reuse it, but cold starts pay a connect. `maxDuration` is 30s and the region is `bom1` (Mumbai) in `vercel.json`.
+- **The DNS fallback never triggers.** Vercel's resolver answers SRV queries normally, so the `dns.setServers` workaround built for local Windows machines stays idle.
+- **Request bodies are capped at 4.5 MB** by the platform, below the `10mb` limit the Express JSON parser is configured with. This only matters for `POST /api/restore`, which in-app has had no caller since the Backup modal was removed.
+- **The Express app no longer serves the SPA** when `VERCEL` is set; Vercel's CDN does. Running `npm start` on a normal host still serves `client/dist` exactly as before.
+
+> The Vercel Hobby plan is free for personal, non-commercial projects. A fee-management deployment for a real institution is commercial use, which their terms place on the Pro plan.
+
 ## Troubleshooting
 
 **`Could not connect to MongoDB Atlas: querySrv ECONNREFUSED …`**
