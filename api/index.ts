@@ -1,4 +1,4 @@
-import type { Request, Response } from 'express';
+import type { Express, Request, Response } from 'express';
 
 import { createApp } from '../server/src/app.js';
 import { assertDatabaseConfigured } from '../server/src/config/env.js';
@@ -11,8 +11,13 @@ import { connectDatabase } from '../server/src/config/database.js';
  * request here (see `vercel.json`), so this module only has to keep a MongoDB
  * connection alive and hand the request to the shared Express app. It never
  * calls `listen()` — the platform owns the HTTP lifecycle.
+ *
+ * The root `package.json` declares `"type": "module"`, so Vercel compiles this
+ * function and the server sources it imports as ES modules. That matters: the
+ * shared sources use `import.meta` and a top-level `__dirname`, both of which
+ * are invalid in a CommonJS compilation and would abort the function at load.
  */
-const app = createApp();
+let app: Express | null = null;
 
 /**
  * Module scope survives between invocations of a *warm* function instance, which
@@ -35,6 +40,20 @@ function initDatabase(): Promise<unknown> {
 }
 
 export default async function handler(req: Request, res: Response) {
+  let instance = app;
+
+  if (!instance) {
+    try {
+      instance = createApp();
+      app = instance;
+    } catch (err: any) {
+      // Without this the platform reports an opaque 500, which says nothing
+      // about the actual misconfiguration.
+      res.status(500).json({ error: `Application failed to start: ${err.message}` });
+      return;
+    }
+  }
+
   try {
     await (connection || initDatabase());
   } catch (err: any) {
@@ -42,5 +61,5 @@ export default async function handler(req: Request, res: Response) {
     return;
   }
 
-  return app(req, res);
+  return instance(req, res);
 }
